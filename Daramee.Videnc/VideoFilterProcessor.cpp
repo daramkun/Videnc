@@ -1,9 +1,4 @@
-#include <string>
-#include <vector>
-#include <map>
-
-#include "EncodingSettings.hpp"
-#include "VideoFilterProcessor.hpp"
+#include "Videnc.hpp"
 
 #include <d2d1_1.h>
 #include <d2d1_1helper.h>
@@ -19,6 +14,8 @@
 #pragma comment ( lib, "dxgi.lib" )
 #pragma comment ( lib, "dxguid.lib" )
 #pragma comment ( lib, "WindowsCodecs.lib" )
+
+#include <map>
 
 #define SAFE_RELEASE(x)										if ( x ) x->Release (); x = nullptr;
 
@@ -72,7 +69,7 @@ void __get_optimal_options ( ULONGLONG time, std::vector<VideoFilterTimeline> & 
 		VideoFilterTimeline & current = timeline [ i ];
 		VideoFilterTimeline & next = timeline [ i + 1 ];
 
-		if ( current.time >= time && next.time <= time )
+		if ( time >= current.time && time <= next.time )
 		{
 			start = current;
 			end = next;

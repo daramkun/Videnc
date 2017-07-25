@@ -1,17 +1,10 @@
 #include <iostream>
 #include <cstring>
 
-#include <Windows.h>
 #include <atlconv.h>
 #include <crtdbg.h>
 
-#include <string>
-#include <vector>
-
-#include "Stream.hpp"
-#include "EncodingSettings.hpp"
-#include "MPEG4Streamer.hpp"
-#include "VideoFilterProcessor.hpp"
+#include "Videnc.hpp"
 
 #define ARGUMENT_OUTPUT										1
 #define ARGUMENT_TARGET										2
@@ -38,18 +31,7 @@ int main ( int argc, char ** argv )
 		return 0xffffffff;
 	}
 
-	FILE * fp = fopen ( argv [ ARGUMENT_SETTINGS ], "rt" );
-	fseek ( fp, 0, SEEK_END );
-	long len = ftell ( fp );
-	fseek ( fp, 0, SEEK_SET );
-	char * dat = new char [ len + 1 ];
-	memset ( dat, 0, len + 1 );
-	fread ( dat, len, 1, fp );
-	//dat [ len ] = '\0';
-	fclose ( fp );
-
-	std::string text = dat;
-	delete [] dat;
+	std::string text = json_file_to_text ( argv [ ARGUMENT_SETTINGS ] );
 
 	std::vector<VideoFilter> videoFilters;
 	std::vector<AudioFilter> audioFilters;

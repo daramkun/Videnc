@@ -89,6 +89,7 @@
     <ClInclude Include="json.hpp" />
     <ClInclude Include="MPEG4Streamer.hpp" />
     <ClInclude Include="Stream.hpp" />
+    <ClInclude Include="Videnc.hpp" />
     <ClInclude Include="VideoFilterProcessor.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

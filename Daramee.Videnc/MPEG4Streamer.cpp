@@ -1,10 +1,4 @@
-#include <string>
-#include <vector>
-#include <thread>
-
-#include "EncodingSettings.hpp"
-#include "MPEG4Streamer.hpp"
-#include "VideoFilterProcessor.hpp"
+#include "Videnc.hpp"
 
 #include <mfapi.h>
 #include <mfidl.h>
@@ -18,6 +12,8 @@
 #pragma comment ( lib, "mfplat.lib" )
 #pragma comment ( lib, "mfuuid.lib" )
 #pragma comment ( lib, "mfreadwrite.lib" )
+
+#include <thread>
 
 #define SAFE_RELEASE(x)										if ( x ) x->Release (); x = nullptr;
 

@@ -1,7 +1,4 @@
-#include <string>
-#include <vector>
-
-#include "EncodingSettings.hpp"
+#include "Videnc.hpp"
 
 #include "json.hpp"
 using json = nlohmann::json;
@@ -9,6 +6,9 @@ using json = nlohmann::json;
 #include <regex>
 using regex = std::regex;
 using smatch = std::smatch;
+#include <fstream>
+#include <codecvt>
+#include <sstream>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -119,6 +119,30 @@ VideoFilterOption __convert_filter_option ( VideoFilterType type, json & json )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+std::string json_file_to_text ( const char * filename )
+{
+	std::ifstream ifs ( filename );
+	char bomBuffer [ 4 ];
+	ifs.read ( bomBuffer, 4 );
+	if ( '\xEF' == bomBuffer [ 0 ] && '\xBB' == bomBuffer [ 1 ] && '\xBF' == bomBuffer [ 2 ] )
+	{
+		ifs.seekg ( 3, std::ios::beg );
+		ifs.imbue ( std::locale ( std::locale::empty (), new std::codecvt_utf8<char> ) );
+	}
+	else if ( '\xFE' == bomBuffer [ 0 ] && '\xFF' == bomBuffer [ 1 ] )
+	{
+		ifs.seekg ( 2, std::ios::beg );
+		ifs.imbue ( std::locale ( std::locale::empty (), new std::codecvt_utf16<char> ) );
+	}
+	else
+		ifs.seekg ( 0, std::ios::beg );
+
+	std::stringstream ss;
+	ss << ifs.rdbuf ();
+	
+	return ss.str ();
+}
+
 int read_encoding_settings ( const std::string & text, std::vector<VideoFilter>& videoFilters, std::vector<AudioFilter> & audioFilters )
 {
 	auto parsed = json::parse ( text.c_str () );
@@ -159,4 +183,6 @@ int read_encoding_settings ( const std::string & text, std::vector<VideoFilter>&
 
 		audioFilters.push_back ( filter );
 	}
+
+	return 0;
 }

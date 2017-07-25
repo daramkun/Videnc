@@ -1,7 +1,5 @@
 #pragma once
 
-#include <Windows.h>
-
 #define VideoFilterType_Sharpen								"sharpen"
 #define VideoFilterType_Blur								"blur"
 #define VideoFilterType_Grayscale							"grayscale"
@@ -64,4 +62,5 @@ struct AudioFilter
 
 };
 
+std::string json_file_to_text ( const char * filename );
 int read_encoding_settings ( const std::string & text, std::vector<VideoFilter> & videoFilters, std::vector<AudioFilter> & audioFilters );
