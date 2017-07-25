@@ -2,8 +2,8 @@
 #include <vector>
 #include <map>
 
-#include "EncodingSettings.h"
-#include "VideoFilterProcessor.h"
+#include "EncodingSettings.hpp"
+#include "VideoFilterProcessor.hpp"
 
 #include <d2d1_1.h>
 #include <d2d1_1helper.h>
@@ -22,6 +22,8 @@
 
 #define SAFE_RELEASE(x)										if ( x ) x->Release (); x = nullptr;
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 ID2D1Factory * d2d1Factory;
 IDXGIDevice1 * dxgiDevice;
 ID2D1Device * d2d1Device;
@@ -31,7 +33,9 @@ IWICImagingFactory * wicFactory;
 std::vector<VideoFilter> videoFilters;
 std::map<std::string, ID2D1Bitmap*> cachedBitmaps;
 
-IWICBitmap* create_bitmap ( IWICImagingFactory * wicFactory, std::string & filename )
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+IWICBitmap* __create_bitmap ( IWICImagingFactory * wicFactory, std::string & filename )
 {
 	USES_CONVERSION;
 
@@ -54,6 +58,55 @@ IWICBitmap* create_bitmap ( IWICImagingFactory * wicFactory, std::string & filen
 
 	return bitmap;
 }
+
+bool __is_match_time_range ( ULONGLONG time, std::vector<VideoFilterTimeline> & timeline )
+{
+	return ( time >= timeline [ 0 ].time && time <= timeline [ timeline.size () - 1 ].time );
+}
+
+void __get_optimal_options ( ULONGLONG time, std::vector<VideoFilterTimeline> & timeline, VideoFilterTimeline & start, VideoFilterTimeline & end )
+{
+	size_t size = timeline.size () - 1;
+	for ( size_t i = 0; i < size; ++i )
+	{
+		VideoFilterTimeline & current = timeline [ i ];
+		VideoFilterTimeline & next = timeline [ i + 1 ];
+
+		if ( current.time >= time && next.time <= time )
+		{
+			start = current;
+			end = next;
+			return;
+		}
+	}
+}
+
+float __weight_float ( ULONGLONG start, ULONGLONG end, ULONGLONG current, float sv, float ev )
+{
+	float weight = ( end - current ) / ( float ) ( end - start );
+	return ev - ( ( ev - sv ) * weight );
+}
+
+D2D1_POINT_2F __weight_point ( ULONGLONG start, ULONGLONG end, ULONGLONG current, D2D1_POINT_2F & sv, D2D1_POINT_2F & ev )
+{
+	return D2D1::Point2F ( __weight_float ( start, end, current, sv.x, ev.x ), __weight_float ( start, end, current, sv.y, ev.y ) );
+}
+
+D2D1_SIZE_U __weight_size ( ULONGLONG start, ULONGLONG end, ULONGLONG current, D2D1_SIZE_U & sv, D2D1_SIZE_U & ev )
+{
+	return D2D1::SizeU ( ( UINT32 ) __weight_float ( start, end, current, sv.width, ev.width ), ( UINT32 ) __weight_float ( start, end, current, sv.height, ev.height ) );
+}
+
+D2D1_RECT_F __weight_rect ( ULONGLONG start, ULONGLONG end, ULONGLONG current, D2D1_RECT_F & sv, D2D1_RECT_F & ev )
+{
+	return D2D1::RectF (
+		__weight_float ( start, end, current, sv.left, ev.left ),
+		__weight_float ( start, end, current, sv.top, ev.top ),
+		__weight_float ( start, end, current, sv.right, ev.right ),
+		__weight_float ( start, end, current, sv.bottom, ev.bottom ) );
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 int begin_video_filter_processor ( std::vector<VideoFilter> & videoFilters, unsigned width, unsigned height )
 {
@@ -88,10 +141,10 @@ int begin_video_filter_processor ( std::vector<VideoFilter> & videoFilters, unsi
 	::videoFilters = videoFilters;
 	for ( auto i = videoFilters.begin (); i != videoFilters.end (); ++i )
 	{
-		if ( VideoFilterType_BlendImage == ( *i ).filterType )
+		if ( VideoFilterType_AddImage == ( *i ).filterType )
 		{
-			std::string filename = ( *i ).startOption.blendImageFilterOption.imageFilename;
-			IWICBitmap * bitmap = create_bitmap ( wicFactory, filename );
+			std::string filename = ( *i ).timeline [ 0 ].option.addImage.imageFilename;
+			IWICBitmap * bitmap = __create_bitmap ( wicFactory, filename );
 			
 			if ( nullptr == bitmap )
 				return 0xffffffc7;
@@ -127,36 +180,11 @@ bool is_detected_video_processing_time ( ULONGLONG time )
 {
 	for ( auto i = videoFilters.begin (); i != videoFilters.end (); ++i )
 	{
-		if ( time >= ( *i ).startTime && time <= ( *i ).endTime )
+		if ( __is_match_time_range ( time, ( *i ).timeline ) )
 			return true;
 	}
 
 	return false;
-}
-
-float __weight_float ( ULONGLONG start, ULONGLONG end, ULONGLONG current, float sv, float ev )
-{
-	float weight = ( end - current ) / ( float ) ( end - start );
-	return ev - ( ( ev - sv ) * weight );
-}
-
-D2D1_POINT_2F __weight_point ( ULONGLONG start, ULONGLONG end, ULONGLONG current, D2D1_POINT_2F & sv, D2D1_POINT_2F & ev )
-{
-	return D2D1::Point2F ( __weight_float ( start, end, current, sv.x, ev.x ), __weight_float ( start, end, current, sv.y, ev.y ) );
-}
-
-D2D1_SIZE_U __weight_size ( ULONGLONG start, ULONGLONG end, ULONGLONG current, D2D1_SIZE_U & sv, D2D1_SIZE_U & ev )
-{
-	return D2D1::SizeU ( ( UINT32 ) __weight_float ( start, end, current, sv.width, ev.width ), ( UINT32 ) __weight_float ( start, end, current, sv.height, ev.height ) );
-}
-
-D2D1_RECT_F __weight_rect ( ULONGLONG start, ULONGLONG end, ULONGLONG current, D2D1_RECT_F & sv, D2D1_RECT_F & ev )
-{
-	return D2D1::RectF (
-		__weight_float ( start, end, current, sv.left, ev.left ),
-		__weight_float ( start, end, current, sv.top, ev.top ),
-		__weight_float ( start, end, current, sv.right, ev.right ),
-		__weight_float ( start, end, current, sv.bottom, ev.bottom ) );
 }
 
 void process_video_filter ( ULONGLONG time, BYTE * pbBuffer, UINT width, UINT height )
@@ -175,13 +203,13 @@ void process_video_filter ( ULONGLONG time, BYTE * pbBuffer, UINT width, UINT he
 	for ( auto i = videoFilters.begin (); i != videoFilters.end (); ++i )
 	{
 		auto item = ( *i );
-		auto start = item.startOption;
-		auto end = item.endOption;
-		auto st = item.startTime;
-		auto et = item.endTime;
-
-		if ( time >= st && time <= et )
+		if ( __is_match_time_range ( time, item.timeline ) )
 		{
+			VideoFilterTimeline start, end;
+			__get_optimal_options ( time, item.timeline, start, end );
+			ULONGLONG & st = start.time, & et = end.time;
+			VideoFilterOption & so = start.option, & eo = end.option;
+
 			if ( VideoFilterType_Sharpen == item.filterType )
 			{
 				CComPtr<ID2D1Effect> sharpenEffect;
@@ -189,20 +217,16 @@ void process_video_filter ( ULONGLONG time, BYTE * pbBuffer, UINT width, UINT he
 
 				sharpenEffect->SetInput ( 0, image );
 				sharpenEffect->SetValue ( D2D1_SHARPEN_PROP_SHARPNESS,
-					__weight_float ( st, et, time, start.sharpenFilterOption.sharpeness, end.sharpenFilterOption.sharpeness ) );
+					__weight_float ( st, et, time, so.sharpen.sharpeness, eo.sharpen.sharpeness ) );
 				sharpenEffect->SetValue ( D2D1_SHARPEN_PROP_THRESHOLD,
-					__weight_float ( st, et, time, start.sharpenFilterOption.threshold, end.sharpenFilterOption.threshold ) );
+					__weight_float ( st, et, time, so.sharpen.threshold, eo.sharpen.threshold ) );
 				
 				D2D1_POINT_2F offset = __weight_point ( st, et, time,
-					D2D1::Point2F ( start.sharpenFilterOption.range.left, start.sharpenFilterOption.range.top ),
-					D2D1::Point2F ( end.sharpenFilterOption.range.left, end.sharpenFilterOption.range.top ) );
+					D2D1::Point2F ( so.sharpen.range.left, so.sharpen.range.top ),
+					D2D1::Point2F ( eo.sharpen.range.left, eo.sharpen.range.top ) );
 				D2D1_RECT_F rect = __weight_rect ( st, et, time,
-					D2D1::RectF ( start.sharpenFilterOption.range.left, start.sharpenFilterOption.range.top,
-						start.sharpenFilterOption.range.right,
-						start.sharpenFilterOption.range.bottom ),
-					D2D1::RectF ( end.sharpenFilterOption.range.left, end.sharpenFilterOption.range.top,
-						end.sharpenFilterOption.range.right,
-						end.sharpenFilterOption.range.bottom ) );
+					D2D1::RectF ( so.sharpen.range.left, so.sharpen.range.top, so.sharpen.range.right, so.sharpen.range.bottom ),
+					D2D1::RectF ( eo.sharpen.range.left, eo.sharpen.range.top, eo.sharpen.range.right, eo.sharpen.range.bottom ) );
 
 				d2d1DeviceContext->DrawImage ( sharpenEffect, offset, rect );
 			}
@@ -213,18 +237,14 @@ void process_video_filter ( ULONGLONG time, BYTE * pbBuffer, UINT width, UINT he
 
 				blurEffect->SetInput ( 0, image );
 				blurEffect->SetValue ( D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION,
-					__weight_float ( st, et, time, start.blurFilterOption.deviation, end.blurFilterOption.deviation ) );
+					__weight_float ( st, et, time, so.blur.deviation, eo.blur.deviation ) );
 
 				D2D1_POINT_2F offset = __weight_point ( st, et, time,
-					D2D1::Point2F ( start.blurFilterOption.range.left, start.blurFilterOption.range.top ),
-					D2D1::Point2F ( end.blurFilterOption.range.left, end.blurFilterOption.range.top ) );
+					D2D1::Point2F ( so.blur.range.left, so.blur.range.top ),
+					D2D1::Point2F ( eo.blur.range.left, eo.blur.range.top ) );
 				D2D1_RECT_F rect = __weight_rect ( st, et, time,
-					D2D1::RectF ( start.blurFilterOption.range.left, start.blurFilterOption.range.top,
-						start.blurFilterOption.range.right,
-						start.blurFilterOption.range.bottom ),
-					D2D1::RectF ( end.blurFilterOption.range.left, end.blurFilterOption.range.top,
-						end.blurFilterOption.range.right,
-						end.blurFilterOption.range.bottom ) );
+					D2D1::RectF ( so.blur.range.left, so.blur.range.top, so.blur.range.right, so.blur.range.bottom ),
+					D2D1::RectF ( eo.blur.range.left, eo.blur.range.top, eo.blur.range.right, eo.blur.range.bottom ) );
 
 				d2d1DeviceContext->DrawImage ( blurEffect, offset, rect );
 			}
@@ -236,15 +256,11 @@ void process_video_filter ( ULONGLONG time, BYTE * pbBuffer, UINT width, UINT he
 				grayscaleEffect->SetInput ( 0, image );
 
 				D2D1_POINT_2F offset = __weight_point ( st, et, time,
-					D2D1::Point2F ( start.grayscaleFilterOption.range.left, start.grayscaleFilterOption.range.top ),
-					D2D1::Point2F ( end.grayscaleFilterOption.range.left, end.grayscaleFilterOption.range.top ) );
+					D2D1::Point2F ( so.grayscale.range.left, so.grayscale.range.top ),
+					D2D1::Point2F ( eo.grayscale.range.left, eo.grayscale.range.top ) );
 				D2D1_RECT_F rect = __weight_rect ( st, et, time,
-					D2D1::RectF ( start.grayscaleFilterOption.range.left, start.grayscaleFilterOption.range.top,
-						start.grayscaleFilterOption.range.right,
-						start.grayscaleFilterOption.range.bottom ),
-					D2D1::RectF ( end.grayscaleFilterOption.range.left, end.grayscaleFilterOption.range.top,
-						end.grayscaleFilterOption.range.right,
-						end.grayscaleFilterOption.range.bottom ) );
+					D2D1::RectF ( so.grayscale.range.left, so.grayscale.range.top, so.grayscale.range.right, so.grayscale.range.bottom ),
+					D2D1::RectF ( eo.grayscale.range.left, eo.grayscale.range.top, eo.grayscale.range.right, eo.grayscale.range.bottom ) );
 
 				d2d1DeviceContext->DrawImage ( grayscaleEffect, offset, rect );
 			}
@@ -256,15 +272,11 @@ void process_video_filter ( ULONGLONG time, BYTE * pbBuffer, UINT width, UINT he
 				invertEffect->SetInput ( 0, image );
 
 				D2D1_POINT_2F offset = __weight_point ( st, et, time,
-					D2D1::Point2F ( start.invertFilterOption.range.left, start.invertFilterOption.range.top ),
-					D2D1::Point2F ( end.invertFilterOption.range.left, end.invertFilterOption.range.top ) );
+					D2D1::Point2F ( so.invert.range.left, so.invert.range.top ),
+					D2D1::Point2F ( eo.invert.range.left, eo.invert.range.top ) );
 				D2D1_RECT_F rect = __weight_rect ( st, et, time,
-					D2D1::RectF ( start.invertFilterOption.range.left, start.invertFilterOption.range.top,
-						start.invertFilterOption.range.right,
-						start.invertFilterOption.range.bottom ),
-					D2D1::RectF ( end.invertFilterOption.range.left, end.invertFilterOption.range.top,
-						end.invertFilterOption.range.right,
-						end.invertFilterOption.range.bottom ) );
+					D2D1::RectF ( so.invert.range.left, so.invert.range.top, so.invert.range.right, so.invert.range.bottom ),
+					D2D1::RectF ( eo.invert.range.left, eo.invert.range.top, eo.invert.range.right, eo.invert.range.bottom ) );
 
 				d2d1DeviceContext->DrawImage ( invertEffect, offset, rect );
 			}
@@ -275,27 +287,23 @@ void process_video_filter ( ULONGLONG time, BYTE * pbBuffer, UINT width, UINT he
 
 				sepiaEffect->SetInput ( 0, image );
 				sepiaEffect->SetValue ( D2D1_SEPIA_PROP_INTENSITY,
-					__weight_float ( st, et, time, start.sepiaFilterOption.intensity, end.sepiaFilterOption.intensity ) );
+					__weight_float ( st, et, time, so.sepia.intensity, eo.sepia.intensity ) );
 
 				D2D1_POINT_2F offset = __weight_point ( st, et, time,
-					D2D1::Point2F ( start.sepiaFilterOption.range.left, start.sepiaFilterOption.range.top ),
-					D2D1::Point2F ( end.sepiaFilterOption.range.left, end.sepiaFilterOption.range.top ) );
+					D2D1::Point2F ( so.sepia.range.left, so.sepia.range.top ),
+					D2D1::Point2F ( eo.sepia.range.left, eo.sepia.range.top ) );
 				D2D1_RECT_F rect = __weight_rect ( st, et, time,
-					D2D1::RectF ( start.sepiaFilterOption.range.left, start.sepiaFilterOption.range.top,
-						start.sepiaFilterOption.range.right,
-						start.sepiaFilterOption.range.bottom ),
-					D2D1::RectF ( end.sepiaFilterOption.range.left, end.sepiaFilterOption.range.top,
-						end.sepiaFilterOption.range.right,
-						end.sepiaFilterOption.range.bottom ) );
+					D2D1::RectF ( so.sepia.range.left, so.sepia.range.top, so.sepia.range.right, so.sepia.range.bottom ),
+					D2D1::RectF ( eo.sepia.range.left, eo.sepia.range.top, eo.sepia.range.right, eo.sepia.range.bottom ) );
 
 				d2d1DeviceContext->DrawImage ( sepiaEffect, offset, rect );
 			}
-			else if ( VideoFilterType_BlendImage == item.filterType )
+			else if ( VideoFilterType_AddImage == item.filterType )
 			{
 				D2D1_POINT_2F offset = __weight_point ( st, et, time,
-					D2D1::Point2F ( start.blendImageFilterOption.position.x, start.blendImageFilterOption.position.y ),
-					D2D1::Point2F ( end.blendImageFilterOption.position.x, end.blendImageFilterOption.position.y ) );
-				d2d1DeviceContext->DrawImage ( cachedBitmaps [ std::string ( start.blendImageFilterOption.imageFilename ) ], offset );
+					D2D1::Point2F ( so.addImage.position.x, so.addImage.position.y ),
+					D2D1::Point2F ( eo.addImage.position.x, eo.addImage.position.y ) );
+				d2d1DeviceContext->DrawImage ( cachedBitmaps [ std::string ( so.addImage.imageFilename ) ], offset );
 			}
 		}
 	}

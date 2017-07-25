@@ -1,7 +1,7 @@
 #include <string>
 #include <vector>
 
-#include "EncodingSettings.h"
+#include "EncodingSettings.hpp"
 
 #include "json.hpp"
 using json = nlohmann::json;
@@ -10,33 +10,30 @@ using json = nlohmann::json;
 using regex = std::regex;
 using smatch = std::smatch;
 
-ULONGLONG convert_time ( const std::string & time )
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+ULONGLONG __convert_time ( const std::string & time )
 {
-	auto pattern = regex ( "([0-9]+):([0-9][0-9]):([0-9][0-9]).([0-9][0-9][0-9])" );
+	auto pattern = regex ( "([0-9]+):([0-9][0-9]):([0-9][0-9])(.([0-9][0-9][0-9]))" );
 	smatch match;
 
-	int hour, minute, second, millisecond;
+	ULONGLONG hour, minute, second, millisecond = 0;
 
 	if ( std::regex_match ( time, match, pattern ) )
 	{
 		hour = atoi ( ( *( ++match.begin () ) ).str ().c_str () );
 		minute = atoi ( ( *( ++++match.begin () ) ).str ().c_str () );
 		second = atoi ( ( *( ++++++match.begin () ) ).str ().c_str () );
-		millisecond = atoi ( ( *( ++++++++match.begin () ) ).str ().c_str () );
+		if ( match.size () > 5 )
+			millisecond = atoi ( ( *( ++++++++++match.begin () ) ).str ().c_str () );
 
-		ULONGLONG ret = 0;
-		ret += millisecond;
-		ret += ( second * 1000 );
-		ret += ( minute * 60 * 1000 );
-		ret += ( hour * 60 * 60 * 1000 );
-
-		return ret * 10000ULL;
+		return millisecond + ( second * 10000000ULL ) + ( minute * 600000000ULL ) + ( hour * 36000000000ULL );
 	}
 
 	return 0;
 }
 
-RECT convert_range ( const std::string & range )
+RECT __convert_range ( const std::string & range )
 {
 	auto pattern = regex ( "([0-9]+), ?([0-9]+), ?([0-9]+), ?([0-9]+)" );
 	smatch match;
@@ -53,7 +50,7 @@ RECT convert_range ( const std::string & range )
 	return ret;
 }
 
-POINT convert_point ( const std::string & point )
+POINT __convert_point ( const std::string & point )
 {
 	auto pattern = regex ( "(-?[0-9]+), ?(-?[0-9]+)" );
 	smatch match;
@@ -68,7 +65,7 @@ POINT convert_point ( const std::string & point )
 	return ret;
 }
 
-POINTFLOAT convert_point_float ( const std::string & point )
+POINTFLOAT __convert_point_float ( const std::string & point )
 {
 	auto pattern = regex ( "(-?[0-9]+.[0-9]*), ?(-?[0-9]+.[0-9]*)" );
 	smatch match;
@@ -83,67 +80,83 @@ POINTFLOAT convert_point_float ( const std::string & point )
 	return ret;
 }
 
-VideoFilterOption convert_filter_option ( VideoFilterType type, json & json )
+VideoFilterOption __convert_filter_option ( VideoFilterType type, json & json )
 {
 	VideoFilterOption ret = { 0, };
 
 	if ( VideoFilterType_Sharpen == type )
 	{
-		ret.sharpenFilterOption.range = convert_range ( json.value ( "range", "-1,-1,-1,-1" ) );
-		ret.sharpenFilterOption.sharpeness = json.value<float> ( "sharpness", 0.0f );
-		ret.sharpenFilterOption.threshold = json.value<float> ( "threshold", 0.0f );
+		ret.sharpen.range = __convert_range ( json.value ( "range", "-1,-1,-1,-1" ) );
+		ret.sharpen.sharpeness = json.value<float> ( "sharpness", 0.0f );
+		ret.sharpen.threshold = json.value<float> ( "threshold", 0.0f );
 	}
 	else if ( VideoFilterType_Blur == type )
 	{
-		ret.blurFilterOption.range = convert_range ( json.value ( "range", "-1,-1,-1,-1" ) );
-		ret.blurFilterOption.deviation = json.value<float> ( "deviation", 3.0f );
+		ret.blur.range = __convert_range ( json.value ( "range", "-1,-1,-1,-1" ) );
+		ret.blur.deviation = json.value<float> ( "deviation", 3.0f );
 	}
 	else if ( VideoFilterType_Grayscale == type )
 	{
-		ret.grayscaleFilterOption.range = convert_range ( json.value ( "range", "-1,-1,-1,-1" ) );
+		ret.grayscale.range = __convert_range ( json.value ( "range", "-1,-1,-1,-1" ) );
 	}
 	else if ( VideoFilterType_Invert == type )
 	{
-		ret.invertFilterOption.range = convert_range ( json.value ( "range", "-1,-1,-1,-1" ) );
+		ret.invert.range = __convert_range ( json.value ( "range", "-1,-1,-1,-1" ) );
 	}
 	else if ( VideoFilterType_Sepia == type )
 	{
-		ret.sepiaFilterOption.range = convert_range ( json.value ( "range", "-1,-1,-1,-1" ) );
-		ret.sepiaFilterOption.intensity = json.value<float> ( "intensity", 0.5f );
+		ret.sepia.range = __convert_range ( json.value ( "range", "-1,-1,-1,-1" ) );
+		ret.sepia.intensity = json.value<float> ( "intensity", 0.5f );
 	}
-	else if ( VideoFilterType_BlendImage == type )
+	else if ( VideoFilterType_AddImage == type )
 	{
-		ret.blendImageFilterOption.position = convert_point ( json.value ( "position", "0,0" ) );
-		strcpy ( ret.blendImageFilterOption.imageFilename, json.value ( "filename", "" ).c_str () );
+		ret.addImage.position = __convert_point ( json.value ( "position", "0,0" ) );
+		strcpy ( ret.addImage.imageFilename, json.value ( "filename", "" ).c_str () );
 	}
 
 	return ret;
 }
 
-int read_encoding_settings ( const std::string & text, std::vector<VideoFilter>& videoFilters )
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int read_encoding_settings ( const std::string & text, std::vector<VideoFilter>& videoFilters, std::vector<AudioFilter> & audioFilters )
 {
 	auto parsed = json::parse ( text.c_str () );
 	
-	if ( parsed.find ( "filters" ) == parsed.end () )
-		return 0xfffffaff;
+	if ( parsed.find ( "filters" ) == parsed.end () ) return 0xfffffaff;
 	auto filters = parsed [ "filters" ];
 
-	if ( filters.find ( "video" ) == filters.end () )
-		return 0xfffffafe;
-	auto vid_filters = filters [ "video" ];
+	if ( filters.find ( "video" ) == filters.end () ) return 0xfffffafe;
+	if ( filters.find ( "audio" ) == filters.end () ) return 0xfffffafd;
 
-	size_t videoFilterCount = vid_filters.size ();
-	for ( size_t i = 0; i < videoFilterCount; ++i )
+	auto vid_filters = filters [ "video" ];
+	for ( auto i = vid_filters.begin (); i != vid_filters.end (); ++i )
 	{
-		auto currentFilter = vid_filters [ i ];
+		auto currentFilter = *i;
 
 		VideoFilter filter;
 		filter.filterType = currentFilter.value ( "type", "" );
-		filter.startTime = convert_time ( currentFilter.value ( "start_time", "00:00:00.000" ) );
-		filter.endTime = convert_time ( currentFilter.value ( "end_time", "00:00:00.000" ) );
-		filter.startOption = convert_filter_option ( filter.filterType, currentFilter [ "start_option" ] );
-		filter.endOption = convert_filter_option ( filter.filterType, currentFilter [ "end_option" ] );
+		auto timelines = currentFilter [ "timeline" ];
+		for ( auto j = timelines.begin (); j != timelines.end (); ++j )
+		{
+			auto currentTimeline = *j;
+			VideoFilterTimeline timeline = { 0, };
+			timeline.time = __convert_time ( currentTimeline.value ( "time", "00:00:00.000" ) );
+			timeline.option = __convert_filter_option ( filter.filterType, currentTimeline [ "option" ] );
+			filter.timeline.push_back ( timeline );
+		}
 
 		videoFilters.push_back ( filter );
+	}
+
+	auto aud_filters = filters [ "audio" ];
+	for ( auto i = aud_filters.begin (); i != aud_filters.end (); ++i )
+	{
+		auto currentFilter = *i;
+
+		AudioFilter filter;
+		filter.filterType = currentFilter.value ( "type", "" );
+
+		audioFilters.push_back ( filter );
 	}
 }

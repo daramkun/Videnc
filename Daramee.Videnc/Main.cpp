@@ -9,9 +9,9 @@
 #include <vector>
 
 #include "Stream.hpp"
-#include "EncodingSettings.h"
-#include "MPEG4Streamer.h"
-#include "VideoFilterProcessor.h"
+#include "EncodingSettings.hpp"
+#include "MPEG4Streamer.hpp"
+#include "VideoFilterProcessor.hpp"
 
 #define ARGUMENT_OUTPUT										1
 #define ARGUMENT_TARGET										2
@@ -52,7 +52,8 @@ int main ( int argc, char ** argv )
 	delete [] dat;
 
 	std::vector<VideoFilter> videoFilters;
-	read_encoding_settings ( text, videoFilters );
+	std::vector<AudioFilter> audioFilters;
+	read_encoding_settings ( text, videoFilters, audioFilters );
 
 	IStream * inputStream;
 	IStream * outputStream;
@@ -62,12 +63,17 @@ int main ( int argc, char ** argv )
 	if ( nullptr == inputStream )
 		return 0xfffffffe;
 
+	bool fragmented;
 	if ( strcmp ( "stdout", argv [ ARGUMENT_OUTPUT ] ) == 0 )
+	{
 		outputStream = CreateStreamFromStandardOutputHandle ();
+		fragmented = true;
+	}
 	else
 	{
 		LPCTSTR outputName = A2W ( argv [ ARGUMENT_OUTPUT ] );
 		outputStream = CreateStreamFromFilename ( outputName, true );
+		fragmented = false;
 	}
 	if ( nullptr == outputStream )
 		return 0xfffffffd;
@@ -75,7 +81,7 @@ int main ( int argc, char ** argv )
 	// TODO
 	int result;
 	unsigned width, height;
-	if ( 0 != ( result = begin_stream ( inputStream, outputStream, argv [ ARGUMENT_QUALITY ], &width, &height ) ) )
+	if ( 0 != ( result = begin_stream ( inputStream, outputStream, fragmented, argv [ ARGUMENT_QUALITY ], &width, &height ) ) )
 	{
 		end_stream ();
 		return result;

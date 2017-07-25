@@ -81,14 +81,15 @@
     <ClCompile Include="EncodingSettings.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="MPEG4Streamer.cpp" />
+    <ClCompile Include="Stream.cpp" />
     <ClCompile Include="VideoFilterProcessor.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="EncodingSettings.h" />
+    <ClInclude Include="EncodingSettings.hpp" />
     <ClInclude Include="json.hpp" />
-    <ClInclude Include="MPEG4Streamer.h" />
+    <ClInclude Include="MPEG4Streamer.hpp" />
     <ClInclude Include="Stream.hpp" />
-    <ClInclude Include="VideoFilterProcessor.h" />
+    <ClInclude Include="VideoFilterProcessor.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

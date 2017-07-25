@@ -2,9 +2,9 @@
 #include <vector>
 #include <thread>
 
-#include "EncodingSettings.h"
-#include "MPEG4Streamer.h"
-#include "VideoFilterProcessor.h"
+#include "EncodingSettings.hpp"
+#include "MPEG4Streamer.hpp"
+#include "VideoFilterProcessor.hpp"
 
 #include <mfapi.h>
 #include <mfidl.h>
@@ -21,6 +21,8 @@
 
 #define SAFE_RELEASE(x)										if ( x ) x->Release (); x = nullptr;
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 IMFByteStream * inputStream, * outputStream;
 
 IMFSourceReader * inputReader;
@@ -31,7 +33,9 @@ DWORD videoStreamIndex, audioStreamIndex;
 IMFMediaSink * outputMediaSink;
 IMFSinkWriter * outputWriter;
 
-UINT convert_quality ( const char * quality )
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+UINT __convert_quality ( const char * quality )
 {
 	if ( 0 == strcmp ( "--superhigh", quality ) )
 		return 0;
@@ -46,7 +50,7 @@ UINT convert_quality ( const char * quality )
 	return -1;
 }
 
-bool create_video_output_media_type ( IMFMediaType * base, UINT quality, UINT * width, UINT * height,
+bool __create_video_output_media_type ( IMFMediaType * base, UINT quality, UINT * width, UINT * height,
 	IMFMediaType ** output, IMFMediaType ** input, IMFMediaType ** decoder )
 {
 	MFGetAttributeSize ( base, MF_MT_FRAME_SIZE, width, height );
@@ -92,7 +96,7 @@ bool create_video_output_media_type ( IMFMediaType * base, UINT quality, UINT * 
 	return true;
 }
 
-bool create_audio_output_media_type ( IMFMediaType * base, UINT quality,  UINT * samplerate,
+bool __create_audio_output_media_type ( IMFMediaType * base, UINT quality,  UINT * samplerate,
 	IMFMediaType ** output, IMFMediaType ** input, IMFMediaType ** decoder )
 {
 	UINT channels;
@@ -136,7 +140,9 @@ bool create_audio_output_media_type ( IMFMediaType * base, UINT quality,  UINT *
 	return true;
 }
 
-int begin_stream ( IStream * input, IStream * output, const char * quality, unsigned * width, unsigned * height )
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int begin_stream ( IStream * input, IStream * output, bool fragmentedMPEG4, const char * quality, unsigned * width, unsigned * height )
 {
 	if ( FAILED ( MFStartup ( MF_VERSION ) ) )
 		return 0xffffffee;
@@ -164,14 +170,14 @@ int begin_stream ( IStream * input, IStream * output, const char * quality, unsi
 		return 0xffffffe8;
 
 	CComPtr<IMFMediaType> videoOutputMediaType, videoInputMediaType, videoDecoderMediaType;
-	if ( !create_video_output_media_type ( videoMediaType, convert_quality ( quality ),
+	if ( !__create_video_output_media_type ( videoMediaType, __convert_quality ( quality ),
 		&inputWidth, &inputHeight,
 		&videoOutputMediaType, &videoInputMediaType, &videoDecoderMediaType ) )
 		return 0xffffffe7;
 	*width = inputWidth;
 	*height = inputHeight;
 	CComPtr<IMFMediaType> audioOutputMediaType, audioInputMediaType, audioDecoderMediaType;
-	if ( !create_audio_output_media_type ( audioMediaType, convert_quality ( quality ),
+	if ( !__create_audio_output_media_type ( audioMediaType, __convert_quality ( quality ),
 		&inputSamplerate,
 		&audioOutputMediaType, &audioInputMediaType, &audioDecoderMediaType ) )
 		return 0xffffffe6;
@@ -181,13 +187,22 @@ int begin_stream ( IStream * input, IStream * output, const char * quality, unsi
 	if ( FAILED ( inputReader->SetCurrentMediaType ( MF_SOURCE_READER_FIRST_AUDIO_STREAM, nullptr, audioDecoderMediaType ) ) )
 		return 0xffffffe4;
 
-	if ( FAILED ( MFCreateMPEG4MediaSink ( outputStream, videoOutputMediaType, audioOutputMediaType, &outputMediaSink ) ) )
-		return 0xffffffe3;
+	if ( fragmentedMPEG4 )
+	{
+		if ( FAILED ( MFCreateFMPEG4MediaSink ( outputStream, videoOutputMediaType, audioOutputMediaType, &outputMediaSink ) ) )
+			return 0xffffffe3;
+	}
+	else
+	{
+		if ( FAILED ( MFCreateMPEG4MediaSink ( outputStream, videoOutputMediaType, audioOutputMediaType, &outputMediaSink ) ) )
+			return 0xffffffe3;
+	}
 
 	if ( FAILED ( MFCreateAttributes ( &attr, 1 ) ) )
 		return 0xffffffe2;
 	attr->SetUINT32 ( MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1 );
 	attr->SetUINT32 ( MF_SINK_WRITER_DISABLE_THROTTLING, 1 );
+	attr->SetUINT32 ( MF_MPEG4SINK_MOOV_BEFORE_MDAT, 1 );
 
 	if ( FAILED ( MFCreateSinkWriterFromMediaSink ( outputMediaSink, attr, &outputWriter ) ) )
 		return 0xffffffe1;

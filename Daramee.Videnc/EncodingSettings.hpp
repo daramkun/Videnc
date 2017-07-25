@@ -7,8 +7,11 @@
 #define VideoFilterType_Grayscale							"grayscale"
 #define VideoFilterType_Invert								"invert"
 #define VideoFilterType_Sepia								"sepia"
-#define VideoFilterType_BlendImage							"blendimage"
+#define VideoFilterType_AddImage							"addimage"
 typedef std::string											VideoFilterType;
+
+#define AudioFilterType_Mute								"mute"
+typedef std::string											AudioFilterType;
 
 union VideoFilterOption
 {
@@ -17,37 +20,48 @@ union VideoFilterOption
 		RECT range;
 		float sharpeness;
 		float threshold;
-	} sharpenFilterOption;
+	} sharpen;
 	struct
 	{
 		RECT range;
 		float deviation;
-	} blurFilterOption;
+	} blur;
 	struct
 	{
 		RECT range;
-	} grayscaleFilterOption;
+	} grayscale;
 	struct
 	{
 		RECT range;
-	} invertFilterOption;
+	} invert;
 	struct
 	{
 		RECT range;
 		float intensity;
-	} sepiaFilterOption;
+	} sepia;
 	struct
 	{
 		POINT position;
 		char imageFilename [ MAX_PATH ];
-	} blendImageFilterOption;
+	} addImage;
+};
+
+struct VideoFilterTimeline
+{
+	ULONGLONG time;
+	VideoFilterOption option;
 };
 
 struct VideoFilter
 {
 	VideoFilterType filterType;
-	ULONGLONG startTime, endTime;
-	VideoFilterOption startOption, endOption;
+	std::vector<VideoFilterTimeline> timeline;
 };
 
-int read_encoding_settings ( const std::string & text, std::vector<VideoFilter> & videoFilters );
+struct AudioFilter
+{
+	AudioFilterType filterType;
+
+};
+
+int read_encoding_settings ( const std::string & text, std::vector<VideoFilter> & videoFilters, std::vector<AudioFilter> & audioFilters );

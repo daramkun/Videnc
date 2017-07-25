@@ -27,6 +27,9 @@
     <ClCompile Include="EncodingSettings.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="Stream.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="json.hpp">
@@ -35,13 +38,13 @@
     <ClInclude Include="Stream.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="EncodingSettings.h">
+    <ClInclude Include="VideoFilterProcessor.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="MPEG4Streamer.h">
+    <ClInclude Include="MPEG4Streamer.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="VideoFilterProcessor.h">
+    <ClInclude Include="EncodingSettings.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>
