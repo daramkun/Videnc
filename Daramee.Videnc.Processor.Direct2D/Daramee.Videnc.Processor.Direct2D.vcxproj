@@ -12,10 +12,10 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
-    <ProjectGuid>{C04AF396-92CB-4BF4-82E9-50ABF036A692}</ProjectGuid>
+    <ProjectGuid>{16A21ED4-4F7F-4162-832B-357CD296C55B}</ProjectGuid>
     <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
     <Keyword>ManagedCProj</Keyword>
-    <RootNamespace>Daramee.Videnc</RootNamespace>
+    <RootNamespace>Daramee.Videnc.Processors.Video</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -78,26 +78,27 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <Reference Include="System" />
-    <Reference Include="System.Core" />
     <Reference Include="System.Data" />
     <Reference Include="System.Drawing" />
-    <Reference Include="System.Runtime.Serialization" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Direct2DUtility.h" />
-    <ClInclude Include="MPEG4Streamer.h" />
-    <ClInclude Include="ManagedIStream.h" />
-    <ClInclude Include="Processors.h" />
+    <ClInclude Include="AddImageProcessor.h" />
+    <ClInclude Include="GaussianBlurFilterProcessor.h" />
+    <ClInclude Include="GrayscaleFilterProcessor.h" />
+    <ClInclude Include="InvertFilterProcessor.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="SepiaFilterProcessor.h" />
+    <ClInclude Include="SharpenFilterProcessor.h" />
     <ClInclude Include="Stdafx.h" />
-    <ClInclude Include="Videnc.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AddImageProcessor.cpp" />
     <ClCompile Include="AssemblyInfo.cpp" />
-    <ClCompile Include="Direct2DUtility.cpp" />
-    <ClCompile Include="MPEG4Streamer.cpp" />
-    <ClCompile Include="ManagedIStream.cpp" />
-    <ClCompile Include="Processors.cpp" />
+    <ClCompile Include="GaussianBlurFilterProcessor.cpp" />
+    <ClCompile Include="GrayscaleFilterProcessor.cpp" />
+    <ClCompile Include="InvertFilterProcessor.cpp" />
+    <ClCompile Include="SepiaFilterProcessor.cpp" />
+    <ClCompile Include="SharpenFilterProcessor.cpp" />
     <ClCompile Include="Stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
@@ -105,6 +106,14 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="app.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Daramee.Videnc.Util\Daramee.Videnc.Util.csproj">
+      <Project>{bc5e4a1c-71ae-40a2-bce0-f5a04477ab19}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\Daramee.Videnc\Daramee.Videnc.vcxproj">
+      <Project>{c04af396-92cb-4bf4-82e9-50abf036a692}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -1,263 +1,334 @@
-#include "Videnc.hpp"
+﻿// 기본 DLL 파일입니다.
 
-#include <mfapi.h>
-#include <mfidl.h>
-#include <mfreadwrite.h>
-#include <mfplay.h>
-#include <mftransform.h>
-#include <codecapi.h>
-#include <atlbase.h>
+#include "stdafx.h"
 
-#pragma comment ( lib, "mf.lib" )
-#pragma comment ( lib, "mfplat.lib" )
-#pragma comment ( lib, "mfuuid.lib" )
-#pragma comment ( lib, "mfreadwrite.lib" )
+#include "Videnc.h"
 
-#include <thread>
-
-#define SAFE_RELEASE(x)										if ( x ) x->Release (); x = nullptr;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-IMFByteStream * inputStream, * outputStream;
-
-IMFSourceReader * inputReader;
-UINT inputWidth, inputHeight;
-UINT inputSamplerate;
-DWORD videoStreamIndex, audioStreamIndex;
-
-IMFMediaSink * outputMediaSink;
-IMFSinkWriter * outputWriter;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-UINT __convert_quality ( const char * quality )
+Daramee::Videnc::MPEG4Streamer::MPEG4Streamer ( Stream^ outputStream, MPEG4StreamSettings settings, Stream^ inputStream )
+	: outputStream ( new ManagedIStream ( outputStream ) ), inputStream ( new ManagedIStream ( inputStream ) ),
+	  streamSettings ( settings ), streamingStarted ( false )
 {
-	if ( 0 == strcmp ( "--superhigh", quality ) )
-		return 0;
-	if ( 0 == strcmp ( "--high", quality ) )
-		return 1;
-	if ( 0 == strcmp ( "--medium", quality ) )
-		return 2;
-	if ( 0 == strcmp ( "--low", quality ) )
-		return 3;
-	if ( 0 == strcmp ( "--superlow", quality ) )
-		return 4;
-	return -1;
-}
+	if ( FAILED ( MFStartup ( MF_VERSION, MFSTARTUP_FULL ) ) )
+		throw gcnew NotSupportedException ( "Media Foundation is not Ready to this Platform." );
 
-bool __create_video_output_media_type ( IMFMediaType * base, UINT quality, UINT * width, UINT * height,
-	IMFMediaType ** output, IMFMediaType ** input, IMFMediaType ** decoder )
-{
-	MFGetAttributeSize ( base, MF_MT_FRAME_SIZE, width, height );
-	UINT32 numerator, denominator;
-	MFGetAttributeRatio ( base, MF_MT_FRAME_RATE, &numerator, &denominator );
+	outputByteStream = CreateByteStream ( this->outputStream );
+	if ( nullptr == outputByteStream ) throw gcnew IOException ( "Cannot create IMFByteStream from System::IO::Stream(outputStream)." );
+	inputByteStream = CreateByteStream ( this->inputStream );
+	if ( nullptr == inputByteStream ) throw gcnew IOException ( "Cannot create IMFByteStream from System::IO::Stream(inputStream)." );
+	
+	CComPtr<IMFAttributes> attr = CreateAttribute ( true );
+	CComPtr<IMFSourceReader> tempSourceReader;
+	if ( FAILED ( MFCreateSourceReaderFromByteStream ( inputByteStream, attr, &tempSourceReader ) ) )
+		throw gcnew System::IO::IOException ( "Cannot create IMFSourceReader." );
+	inputSourceReader = tempSourceReader.Detach ();
+	attr.Release ();
 
-	UINT factor = 0;
-	switch ( quality )
-	{
-	case 0: factor = 7; break;
-	case 1: factor = 6; break;
-	case 2: factor = 5; break;
-	case 3: factor = 4; break;
-	case 4: factor = 3; break;
-	default: return false;
-	}
+	GetSourceReaderStreamIndicies ();
 
-	if ( FAILED ( MFCreateMediaType ( output ) ) )
-		return false;
-	( *output )->SetGUID ( MF_MT_MAJOR_TYPE, MFMediaType_Video );
-	( *output )->SetGUID ( MF_MT_SUBTYPE, MFVideoFormat_H264 );
-	( *output )->SetUINT32 ( MF_MT_AVG_BITRATE, ( *width * *height ) * factor );
-	( *output )->SetUINT32 ( MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_High );
-	( *output )->SetUINT32 ( MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
-	MFSetAttributeSize ( ( *output ), MF_MT_FRAME_SIZE, *width, *height );
-	MFSetAttributeRatio ( ( *output ), MF_MT_FRAME_RATE, numerator, denominator );
-	MFSetAttributeRatio ( ( *output ), MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
-
-	if ( FAILED ( MFCreateMediaType ( input ) ) )
-		return false;
-	( *input )->SetGUID ( MF_MT_MAJOR_TYPE, MFMediaType_Video );
-	( *input )->SetGUID ( MF_MT_SUBTYPE, MFVideoFormat_RGB32 );
-	( *input )->SetUINT32 ( MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
-	MFSetAttributeSize ( ( *input ), MF_MT_FRAME_SIZE, *width, *height );
-	MFSetAttributeRatio ( ( *input ), MF_MT_FRAME_RATE, numerator, denominator );
-	MFSetAttributeRatio ( ( *input ), MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
-
-	if ( FAILED ( MFCreateMediaType ( decoder ) ) )
-		return false;
-	( *decoder )->SetGUID ( MF_MT_MAJOR_TYPE, MFMediaType_Video );
-	( *decoder )->SetGUID ( MF_MT_SUBTYPE, MFVideoFormat_RGB32 );
-
-	return true;
-}
-
-bool __create_audio_output_media_type ( IMFMediaType * base, UINT quality,  UINT * samplerate,
-	IMFMediaType ** output, IMFMediaType ** input, IMFMediaType ** decoder )
-{
-	UINT channels;
-	base->GetUINT32 ( MF_MT_AUDIO_SAMPLES_PER_SECOND, samplerate );
-	base->GetUINT32 ( MF_MT_AUDIO_NUM_CHANNELS, &channels );
-
-	UINT bps = 0;
-	switch ( quality )
-	{
-	case 0: bps = 24000; break;
-	case 1: bps = 24000; break;
-	case 2: bps = 24000; break;
-	case 3: bps = 20000; break;
-	case 4: bps = 16000; break;
-	default: return false;
-	}
-
-	if ( FAILED ( MFCreateMediaType ( output ) ) )
-		return false;
-	( *output )->SetGUID ( MF_MT_MAJOR_TYPE, MFMediaType_Audio );
-	( *output )->SetGUID ( MF_MT_SUBTYPE, MFAudioFormat_AAC );
-	( *output )->SetUINT32 ( MF_MT_AUDIO_BITS_PER_SAMPLE, 16 );
-	( *output )->SetUINT32 ( MF_MT_AUDIO_SAMPLES_PER_SECOND, *samplerate );
-	( *output )->SetUINT32 ( MF_MT_AUDIO_NUM_CHANNELS, channels );
-	( *output )->SetUINT32 ( MF_MT_AUDIO_AVG_BYTES_PER_SECOND, bps );
-	( *output )->SetUINT32 ( MF_MT_AAC_PAYLOAD_TYPE, 0 );
-
-	if ( FAILED ( MFCreateMediaType ( input ) ) )
-		return false;
-	( *input )->SetGUID ( MF_MT_MAJOR_TYPE, MFMediaType_Audio );
-	( *input )->SetGUID ( MF_MT_SUBTYPE, MFAudioFormat_PCM );
-	( *input )->SetUINT32 ( MF_MT_AUDIO_BITS_PER_SAMPLE, 16 );
-	( *input )->SetUINT32 ( MF_MT_AUDIO_SAMPLES_PER_SECOND, *samplerate );
-	( *input )->SetUINT32 ( MF_MT_AUDIO_NUM_CHANNELS, channels );
-
-	if ( FAILED ( MFCreateMediaType ( decoder ) ) )
-		return false;
-	( *decoder )->SetGUID ( MF_MT_MAJOR_TYPE, MFMediaType_Audio );
-	( *decoder )->SetGUID ( MF_MT_SUBTYPE, MFAudioFormat_PCM );
-
-	return true;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-int begin_stream ( IStream * input, IStream * output, bool fragmentedMPEG4, const char * quality, unsigned * width, unsigned * height )
-{
-	if ( FAILED ( MFStartup ( MF_VERSION ) ) )
-		return 0xffffffee;
-
-	if ( FAILED ( MFCreateMFByteStreamOnStream ( input, &inputStream ) ) )
-		return 0xffffffed;
-	if ( FAILED ( MFCreateMFByteStreamOnStream ( output, &outputStream ) ) )
-		return 0xffffffec;
-
-	CComPtr<IMFAttributes> attr;
-	if ( FAILED ( MFCreateAttributes ( &attr, 1 ) ) )
-		return 0xffffffeb;
-	attr->SetUINT32 ( MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1 );
-	attr->SetUINT32 ( MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, 1 );
-
-	if ( FAILED ( MFCreateSourceReaderFromByteStream ( inputStream, attr, &inputReader ) ) )
-		return 0xffffffea;
-
-	attr = nullptr;
-
-	CComPtr<IMFMediaType> videoMediaType, audioMediaType;
-	if ( FAILED ( inputReader->GetNativeMediaType ( MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &videoMediaType ) ) )
-		return 0xffffffe9;
-	if ( FAILED ( inputReader->GetNativeMediaType ( MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0, &audioMediaType ) ) )
-		return 0xffffffe8;
+	CComPtr<IMFMediaType> nativeVideoMediaType, nativeAudioMediaType;
+	GetNativeMediaTypeFromSourceReader ( &nativeVideoMediaType, &nativeAudioMediaType );
+	AnalyseInputMediaInformation ( nativeVideoMediaType, nativeAudioMediaType );
 
 	CComPtr<IMFMediaType> videoOutputMediaType, videoInputMediaType, videoDecoderMediaType;
-	if ( !__create_video_output_media_type ( videoMediaType, __convert_quality ( quality ),
-		&inputWidth, &inputHeight,
-		&videoOutputMediaType, &videoInputMediaType, &videoDecoderMediaType ) )
-		return 0xffffffe7;
-	*width = inputWidth;
-	*height = inputHeight;
 	CComPtr<IMFMediaType> audioOutputMediaType, audioInputMediaType, audioDecoderMediaType;
-	if ( !__create_audio_output_media_type ( audioMediaType, __convert_quality ( quality ),
-		&inputSamplerate,
-		&audioOutputMediaType, &audioInputMediaType, &audioDecoderMediaType ) )
-		return 0xffffffe6;
 
-	if ( FAILED ( inputReader->SetCurrentMediaType ( MF_SOURCE_READER_FIRST_VIDEO_STREAM, nullptr, videoDecoderMediaType ) ) )
-		return 0xffffffe5;
-	if ( FAILED ( inputReader->SetCurrentMediaType ( MF_SOURCE_READER_FIRST_AUDIO_STREAM, nullptr, audioDecoderMediaType ) ) )
-		return 0xffffffe4;
+	if ( !CreateVideoOutputMediaTypes ( &videoOutputMediaType, &videoInputMediaType, &videoDecoderMediaType ) )
+		throw gcnew System::Exception ( "Cannot Create Media Types for Video." );
+	if ( !CreateAudioOutputMediaTypes ( &audioOutputMediaType, &audioInputMediaType, &audioDecoderMediaType ) )
+		throw gcnew System::Exception ( "Cannot Create Media Types for Audio." );
 
-	if ( fragmentedMPEG4 )
+	if ( inputMediaInfo.HasVideo )
+		if ( FAILED ( inputSourceReader->SetCurrentMediaType ( readerVideoStreamIndex, nullptr, videoDecoderMediaType ) ) )
+			throw gcnew System::IO::IOException ( "Cannot Set Media Type for Video." );
+	if ( inputMediaInfo.HasAudio )
+		if ( FAILED ( inputSourceReader->SetCurrentMediaType ( readerAudioStreamIndex, nullptr, audioDecoderMediaType ) ) )
+			throw gcnew System::IO::IOException ( "Cannot Set Media Type for Audio." );
+
+	CComPtr<IMFMediaSink> tempMediaSink;
+	if ( streamSettings.IsFragmentedMPEG4Stream )
 	{
-		if ( FAILED ( MFCreateFMPEG4MediaSink ( outputStream, videoOutputMediaType, audioOutputMediaType, &outputMediaSink ) ) )
-			return 0xffffffe3;
+		if ( FAILED ( MFCreateFMPEG4MediaSink ( outputByteStream, videoOutputMediaType, audioOutputMediaType, &tempMediaSink ) ) )
+			throw gcnew System::IO::IOException ( "Cannot Create Video Media Sink." );
 	}
 	else
 	{
-		if ( FAILED ( MFCreateMPEG4MediaSink ( outputStream, videoOutputMediaType, audioOutputMediaType, &outputMediaSink ) ) )
-			return 0xffffffe3;
+		if ( FAILED ( MFCreateMPEG4MediaSink ( outputByteStream, videoOutputMediaType, audioOutputMediaType, &tempMediaSink ) ) )
+			throw gcnew System::IO::IOException ( "Cannot Create Audio Media Sink." );
 	}
+	outputMediaSink = tempMediaSink.Detach ();
 
-	if ( FAILED ( MFCreateAttributes ( &attr, 1 ) ) )
-		return 0xffffffe2;
-	attr->SetUINT32 ( MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1 );
-	attr->SetUINT32 ( MF_SINK_WRITER_DISABLE_THROTTLING, 1 );
-	attr->SetUINT32 ( MF_MPEG4SINK_MOOV_BEFORE_MDAT, 1 );
+	attr = CreateAttribute ( false );
+	CComPtr<IMFSinkWriter> tempSinkWriter;
+	if ( FAILED ( MFCreateSinkWriterFromMediaSink ( outputMediaSink, attr, &tempSinkWriter ) ) )
+		throw gcnew System::IO::IOException ( "Cannot Create Sink Writer." );
+	outputSinkWriter = tempSinkWriter.Detach ();
+	attr.Release ();
 
-	if ( FAILED ( MFCreateSinkWriterFromMediaSink ( outputMediaSink, attr, &outputWriter ) ) )
-		return 0xffffffe1;
-
-	attr = nullptr;
-
-	if ( FAILED ( outputWriter->SetInputMediaType ( 0, videoInputMediaType, nullptr ) ) )
-		return 0xffffffe0;
-	if ( FAILED ( outputWriter->SetInputMediaType ( 1, audioInputMediaType, nullptr ) ) )
-		return 0xffffffdf;
-
-	DWORD temp1; LONGLONG temp2; IMFSample * temp3;
-	if ( FAILED ( inputReader->ReadSample ( MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_SOURCE_READER_CONTROLF_DRAIN, &videoStreamIndex, &temp1, &temp2, &temp3 ) ) )
-		return 0xffffffde;
-	if ( FAILED ( inputReader->ReadSample ( MF_SOURCE_READER_FIRST_AUDIO_STREAM, MF_SOURCE_READER_CONTROLF_DRAIN, &audioStreamIndex, &temp1, &temp2, &temp3 ) ) )
-		return 0xffffffdd;
-
-	return 0;
+	if ( inputMediaInfo.HasVideo )
+		if ( FAILED ( outputSinkWriter->SetInputMediaType ( 0, videoInputMediaType, nullptr ) ) )
+			throw gcnew System::Exception ( "Cannot Set Video Media Type to IMFSinkWriter." );
+	if ( inputMediaInfo.HasAudio )
+		if ( FAILED ( outputSinkWriter->SetInputMediaType ( 1, audioInputMediaType, nullptr ) ) )
+			throw gcnew System::Exception ( "Cannot Set Audio Media Type to IMFSinkWriter." );
 }
 
-void end_stream ()
+Daramee::Videnc::MPEG4Streamer::~MPEG4Streamer ()
 {
-	SAFE_RELEASE ( outputWriter );
-	SAFE_RELEASE ( outputMediaSink );
-	
-	SAFE_RELEASE ( inputReader );
+	if ( this->Processor != nullptr )
+		delete this->Processor;
+	this->Processor = nullptr;
 
-	SAFE_RELEASE ( outputStream );
-	SAFE_RELEASE ( inputStream );
+	if ( streamingThread != nullptr )
+		StopStreaming ();
+
+	SAFE_RELEASE ( outputSinkWriter );
+	SAFE_RELEASE ( outputMediaSink );
+
+	SAFE_RELEASE ( inputSourceReader );
+
+	SAFE_RELEASE ( inputByteStream );
+	SAFE_RELEASE ( outputByteStream );
 
 	MFShutdown ();
 }
 
-void streaming ()
+void Daramee::Videnc::MPEG4Streamer::StartStreaming ()
 {
-	outputWriter->BeginWriting ();
+	if ( streamingStarted ) return;
+
+	streamingStarted = true;
+
+	streamingThread = gcnew System::Threading::Thread ( gcnew System::Threading::ParameterizedThreadStart ( this, &Daramee::Videnc::MPEG4Streamer::StreamingThreadLogic ) );
+	streamingThread->Start ( this );
+}
+
+void Daramee::Videnc::MPEG4Streamer::StopStreaming ()
+{
+	if ( streamingThread == nullptr ) return;
+	streamingStarted = false;
+	streamingThread->Join ();
+	streamingThread = nullptr;
+}
+
+IMFByteStream* Daramee::Videnc::MPEG4Streamer::CreateByteStream ( ManagedIStream * stream )
+{
+	CComPtr<IStream> tempIStream = stream;
+	IMFByteStream * tempByteStream;
+	if ( FAILED ( MFCreateMFByteStreamOnStream ( tempIStream, &tempByteStream ) ) )
+		throw gcnew System::IO::IOException ( "Cannot create Media Foundation Byte Stream from System::IO::Stream." );
+	return tempByteStream;
+}
+
+IMFAttributes * Daramee::Videnc::MPEG4Streamer::CreateAttribute ( bool forSourceReader )
+{
+	CComPtr<IMFAttributes> attr;
+	if ( FAILED ( MFCreateAttributes ( &attr, 1 ) ) ) return nullptr;
+	if ( streamSettings.HardwareAccelerationEncoding )
+		attr->SetUINT32 ( MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1 );
+
+	if ( forSourceReader )
+	{
+		if ( streamSettings.HardwareAccelerationEncoding )
+			attr->SetUINT32 ( MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, 1 );
+		else
+			attr->SetUINT32 ( MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1 );
+	}
+	else
+	{
+		attr->SetUINT32 ( MF_SINK_WRITER_DISABLE_THROTTLING, 1 );
+		attr->SetUINT32 ( MF_MPEG4SINK_MOOV_BEFORE_MDAT, 1 );
+	}
+
+	return attr.Detach ();
+}
+
+bool Daramee::Videnc::MPEG4Streamer::GetNativeMediaTypeFromSourceReader ( IMFMediaType ** videoMediaType, IMFMediaType ** audioMediaType )
+{
+	if ( nullptr != videoMediaType )
+		if ( FAILED ( inputSourceReader->GetNativeMediaType ( readerVideoStreamIndex, 0, videoMediaType ) ) )
+			return false;
+	if ( nullptr != audioMediaType )
+		if ( FAILED ( inputSourceReader->GetNativeMediaType ( readerAudioStreamIndex, 0, audioMediaType ) ) )
+			return false;
+	return true;
+}
+
+void Daramee::Videnc::MPEG4Streamer::GetSourceReaderStreamIndicies ()
+{
+	DWORD target, temp1; LONGLONG temp2; IMFSample * temp3;
+	
+	inputSourceReader->ReadSample ( MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_SOURCE_READER_CONTROLF_DRAIN, &target, &temp1, &temp2, &temp3 );
+	readerVideoStreamIndex = target;
+	
+	inputSourceReader->ReadSample ( MF_SOURCE_READER_FIRST_AUDIO_STREAM, MF_SOURCE_READER_CONTROLF_DRAIN, &target, &temp1, &temp2, &temp3 );
+	readerAudioStreamIndex = target;
+}
+
+void Daramee::Videnc::MPEG4Streamer::AnalyseInputMediaInformation ( IMFMediaType * videoMediaType, IMFMediaType * audioMediaType )
+{
+	inputMediaInfo = InputMediaInformation ();
+
+	if ( nullptr != videoMediaType )
+	{
+		inputMediaInfo.HasVideo = true;
+
+		UINT width, height;
+		MFGetAttributeSize ( videoMediaType, MF_MT_FRAME_SIZE, &width, &height );
+		UINT32 numerator, denominator;
+		MFGetAttributeRatio ( videoMediaType, MF_MT_FRAME_RATE, &numerator, &denominator );
+
+		inputMediaInfo.VideoWidth = width;
+		inputMediaInfo.VideoHeight = height;
+		inputMediaInfo.VideoFramerateNumerator = numerator;
+		inputMediaInfo.VideoFramerateDenominator = denominator;
+	}
+	else inputMediaInfo.HasVideo = false;
+
+	if ( nullptr != audioMediaType )
+	{
+		inputMediaInfo.HasAudio = true;
+
+		UINT channels, samplerate, bitsPerSample;
+		audioMediaType->GetUINT32 ( MF_MT_AUDIO_NUM_CHANNELS, &channels );
+		audioMediaType->GetUINT32 ( MF_MT_AUDIO_SAMPLES_PER_SECOND, &samplerate );
+		audioMediaType->GetUINT32 ( MF_MT_AUDIO_BITS_PER_SAMPLE, &bitsPerSample );
+
+		inputMediaInfo.AudioChannels = channels;
+		inputMediaInfo.AudioSamplerate = ( AudioSamplerate ) samplerate;
+		inputMediaInfo.AudioBitsPerSample = bitsPerSample;
+	}
+	else inputMediaInfo.HasAudio = false;
+
+	PROPVARIANT prop;
+	if ( FAILED ( inputSourceReader->GetPresentationAttribute ( MF_SOURCE_READER_MEDIASOURCE, MF_PD_DURATION, &prop ) ) )
+		throw gcnew System::IO::IOException ( "Cannot get Duration of Input Media." );
+	inputMediaInfo.Duration = TimeSpan::FromTicks ( prop.uhVal.QuadPart );
+}
+
+bool Daramee::Videnc::MPEG4Streamer::CreateVideoOutputMediaTypes ( IMFMediaType ** outputMediaType, IMFMediaType ** inputMediaType, IMFMediaType ** decoderMediaType )
+{
+	if ( !inputMediaInfo.HasVideo )
+	{
+		*outputMediaType = nullptr;
+		*inputMediaType = nullptr;
+		*decoderMediaType = nullptr;
+
+		return true;
+	}
+
+	CComPtr<IMFMediaType> ret;
+
+	if ( FAILED ( MFCreateMediaType ( &ret ) ) ) return false;
+	ret->SetGUID ( MF_MT_MAJOR_TYPE, MFMediaType_Video );
+	ret->SetGUID ( MF_MT_SUBTYPE, MFVideoFormat_H264 );
+	ret->SetUINT32 ( MF_MT_AVG_BITRATE, streamSettings.VideoBitrate );
+	ret->SetUINT32 ( MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_High );
+	ret->SetUINT32 ( MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
+	if ( streamSettings.ResizeVideo )
+		MFSetAttributeSize ( ret, MF_MT_FRAME_SIZE, streamSettings.VideoWidth, streamSettings.VideoHeight );
+	else
+		MFSetAttributeSize ( ret, MF_MT_FRAME_SIZE, inputMediaInfo.VideoWidth, inputMediaInfo.VideoHeight );
+	if ( streamSettings.ChangeFramerate )
+		MFSetAttributeRatio ( ret, MF_MT_FRAME_RATE, ( UINT ) streamSettings.VideoFramerate, 1 );
+	else
+		MFSetAttributeRatio ( ret, MF_MT_FRAME_RATE, inputMediaInfo.VideoFramerateNumerator, inputMediaInfo.VideoFramerateDenominator );
+	MFSetAttributeRatio ( ret, MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
+	*outputMediaType = ret.Detach ();
+
+	if ( FAILED ( MFCreateMediaType ( &ret ) ) ) return false;
+	ret->SetGUID ( MF_MT_MAJOR_TYPE, MFMediaType_Video );
+	ret->SetGUID ( MF_MT_SUBTYPE, MFVideoFormat_RGB32 );
+	ret->SetUINT32 ( MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive );
+	MFSetAttributeSize ( ret, MF_MT_FRAME_SIZE, inputMediaInfo.VideoWidth, inputMediaInfo.VideoHeight );
+	MFSetAttributeRatio ( ret, MF_MT_FRAME_RATE, inputMediaInfo.VideoFramerateNumerator, inputMediaInfo.VideoFramerateDenominator );
+	MFSetAttributeRatio ( ret, MF_MT_PIXEL_ASPECT_RATIO, 1, 1 );
+	*inputMediaType = ret.Detach ();
+
+	if ( FAILED ( MFCreateMediaType ( &ret ) ) ) return false;
+	ret->SetGUID ( MF_MT_MAJOR_TYPE, MFMediaType_Video );
+	ret->SetGUID ( MF_MT_SUBTYPE, MFVideoFormat_RGB32 );
+	*decoderMediaType = ret.Detach ();
+
+	return true;
+}
+
+bool Daramee::Videnc::MPEG4Streamer::CreateAudioOutputMediaTypes ( IMFMediaType ** outputMediaType, IMFMediaType ** inputMediaType, IMFMediaType ** decoderMediaType )
+{
+	if ( !inputMediaInfo.HasAudio )
+	{
+		*outputMediaType = nullptr;
+		*inputMediaType = nullptr;
+		*decoderMediaType = nullptr;
+
+		return true;
+	}
+
+	CComPtr<IMFMediaType> ret;
+
+	if ( FAILED ( MFCreateMediaType ( &ret ) ) ) return false;
+	ret->SetGUID ( MF_MT_MAJOR_TYPE, MFMediaType_Audio );
+	ret->SetGUID ( MF_MT_SUBTYPE, MFAudioFormat_AAC );
+	ret->SetUINT32 ( MF_MT_AUDIO_BITS_PER_SAMPLE, 16 );
+	ret->SetUINT32 ( MF_MT_AUDIO_SAMPLES_PER_SECOND, ( UINT ) inputMediaInfo.AudioSamplerate );
+	ret->SetUINT32 ( MF_MT_AUDIO_NUM_CHANNELS, inputMediaInfo.AudioChannels );
+	ret->SetUINT32 ( MF_MT_AUDIO_AVG_BYTES_PER_SECOND, ( UINT ) streamSettings.AudioBitrate );
+	ret->SetUINT32 ( MF_MT_AAC_PAYLOAD_TYPE, 0 );
+	*outputMediaType = ret.Detach ();
+
+	if ( FAILED ( MFCreateMediaType ( &ret ) ) ) return false;
+	ret->SetGUID ( MF_MT_MAJOR_TYPE, MFMediaType_Audio );
+	ret->SetGUID ( MF_MT_SUBTYPE, MFAudioFormat_PCM );
+	ret->SetUINT32 ( MF_MT_AUDIO_BITS_PER_SAMPLE, inputMediaInfo.AudioBitsPerSample );
+	ret->SetUINT32 ( MF_MT_AUDIO_SAMPLES_PER_SECOND, ( UINT ) inputMediaInfo.AudioSamplerate );
+	ret->SetUINT32 ( MF_MT_AUDIO_NUM_CHANNELS, inputMediaInfo.AudioChannels );
+	*inputMediaType = ret.Detach ();
+
+	if ( FAILED ( MFCreateMediaType ( &ret ) ) ) return false;
+	ret->SetGUID ( MF_MT_MAJOR_TYPE, MFMediaType_Audio );
+	ret->SetGUID ( MF_MT_SUBTYPE, MFAudioFormat_PCM );
+	*decoderMediaType = ret.Detach ();
+
+	return true;
+}
+
+void Daramee::Videnc::MPEG4Streamer::StreamingThreadLogic ( System::Object ^ param )
+{
+	MPEG4Streamer^ streamer = dynamic_cast< MPEG4Streamer^ > ( param );
+	streamer->proceed = 0;
+	if ( FAILED ( streamer->outputSinkWriter->BeginWriting () ) )
+		throw gcnew IOException ( "Cannot Writing Media to IMFSinkWriter." );
 
 	DWORD actualStreamIndex, streamFlags;
 	LONGLONG readedTimeStamp = 0;
 	IMFSample * readedSample;
 
+	TimeSpan videoProceed, audioProceed;
+
 	bool isVideoComplete = false, isAudioComplete = false;
 
-	while ( true )
+	while ( streamer->IsStreamingStarted )
 	{
-		inputReader->ReadSample ( MF_SOURCE_READER_ANY_STREAM, 0, &actualStreamIndex, &streamFlags, &readedTimeStamp, &readedSample );
+		if ( FAILED ( streamer->inputSourceReader->ReadSample ( MF_SOURCE_READER_ANY_STREAM, 0, &actualStreamIndex, &streamFlags, &readedTimeStamp, &readedSample ) ) )
+			throw gcnew IOException ( "Cannot Read Sample." );
 
 		if ( MF_SOURCE_READERF_ENDOFSTREAM == streamFlags && nullptr == readedSample )
 		{
-			if ( actualStreamIndex == videoStreamIndex ) isVideoComplete = true;
-			else if ( actualStreamIndex == audioStreamIndex ) isAudioComplete = true;
+			if ( actualStreamIndex == streamer->readerVideoStreamIndex ) isVideoComplete = true;
+			else if ( actualStreamIndex == streamer->readerAudioStreamIndex ) isAudioComplete = true;
 
 			if ( isVideoComplete && isAudioComplete ) break;
 			else continue;
 		}
 		else
 		{
-			if ( readedSample == nullptr )
-				continue;
+			if ( readedSample == nullptr ) continue;
+			if ( actualStreamIndex != readerVideoStreamIndex && actualStreamIndex != readerAudioStreamIndex ) continue;
+
+			DWORD writeTargetStreamIndex;
+			if ( actualStreamIndex == readerVideoStreamIndex ) writeTargetStreamIndex = 0;
+			else writeTargetStreamIndex = 1;
+
+			TimeSpan timeSpan = TimeSpan::FromTicks ( readedTimeStamp );
 
 			LONGLONG sampleDuration, sampleTime;
 			DWORD sampleFlags;
@@ -282,52 +353,55 @@ void streaming ()
 			writeSample->SetSampleTime ( sampleTime );
 			writeSample->SetSampleFlags ( 0 );
 
-			if ( actualStreamIndex == videoStreamIndex )
+			writeBuffer->SetCurrentLength ( currentLength );
+			writeBuffer->Lock ( &pbWriteBuffer, nullptr, nullptr );
+
+			if ( writeTargetStreamIndex == 0 )
 			{
-				writeBuffer->SetCurrentLength ( currentLength );
-				writeBuffer->Lock ( &pbWriteBuffer, nullptr, nullptr );
+				if ( nullptr != streamer->Processor && streamer->Processor->IsTargetTime ( timeSpan, ProcessorTarget::Video ) )
+					streamer->Processor->Processing ( streamer, ProcessorTarget::Video, timeSpan, pbReadBuffer, currentLength );
 
-				if ( is_detected_video_processing_time ( readedTimeStamp ) )
-					process_video_filter ( readedTimeStamp, pbReadBuffer, inputWidth, inputHeight );
-
-				for ( unsigned y = 0; y < inputHeight; ++y )
+				for ( unsigned y = 0; y < inputMediaInfo.VideoHeight; ++y )
 				{
 					RtlCopyMemory (
-						pbWriteBuffer + ( y * ( inputWidth * 4 ) ),
-						pbReadBuffer + ( ( inputHeight - y - 1 ) * ( inputWidth * 4 ) ),
-						inputWidth * 4 );
+						pbWriteBuffer + ( y * ( inputMediaInfo.VideoWidth * 4 ) ),
+						pbReadBuffer + ( ( inputMediaInfo.VideoHeight - y - 1 ) * ( inputMediaInfo.VideoWidth * 4 ) ),
+						inputMediaInfo.VideoWidth * 4 );
 				}
 
-				writeBuffer->Unlock ();
-
-				HRESULT hr;
-				if ( FAILED ( hr = outputWriter->WriteSample ( 0, writeSample ) ) )
-					printf ( "Cannot Write Sample of Video\n" );
+				videoProceed = timeSpan;
 			}
-			else if ( actualStreamIndex == audioStreamIndex )
+			else
 			{
-				writeBuffer->SetCurrentLength ( currentLength );
-				writeBuffer->Lock ( &pbWriteBuffer, nullptr, nullptr );
+				if ( nullptr != streamer->Processor && streamer->Processor->IsTargetTime ( timeSpan, ProcessorTarget::Audio ) )
+					streamer->Processor->Processing ( streamer, ProcessorTarget::Audio, timeSpan, pbReadBuffer, currentLength );
 
 				RtlCopyMemory ( pbWriteBuffer, pbReadBuffer, currentLength );
 
-				writeBuffer->Unlock ();
-
-				HRESULT hr;
-				if ( FAILED ( hr = outputWriter->WriteSample ( 1, writeSample ) ) )
-					printf ( "Cannot Write Sample of Audio\n" );
+				audioProceed = timeSpan;
 			}
 
-			writeBuffer->Release ();
-			writeSample->Release ();
+			writeBuffer->Unlock ();
 
-			readBuffer->Unlock ();
+			if ( FAILED ( streamer->outputSinkWriter->WriteSample ( writeTargetStreamIndex, writeSample ) ) )
+				printf ( "Cannot Write Video or Audio Sample.\n" );
 
-			readBuffer->Release ();
-			readedSample->Release ();
+			SAFE_RELEASE ( writeBuffer );
+			SAFE_RELEASE ( writeSample );
+
+			SAFE_RELEASE ( readBuffer );
+			SAFE_RELEASE ( readedSample );
+
+			double videoPercentage = ( videoProceed.Ticks / ( double ) inputMediaInfo.Duration.Ticks );
+			double audioPercentage = ( audioProceed.Ticks / ( double ) inputMediaInfo.Duration.Ticks );
+			proceed = ( videoPercentage + audioPercentage ) / 2;
 		}
 	}
 
-	outputWriter->Finalize ();
-	outputMediaSink->Shutdown ();
+	streamer->outputSinkWriter->Finalize ();
+	streamer->outputMediaSink->Shutdown ();
+
+	streamer->proceed = 1;
+	streamer->streamingStarted = false;
+	streamer->streamingThread = nullptr;
 }

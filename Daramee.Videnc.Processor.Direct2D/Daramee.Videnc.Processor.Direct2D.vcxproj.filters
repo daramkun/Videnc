@@ -1,0 +1,72 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="리소스 파일">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Direct2D">
+      <UniqueIdentifier>{494ebd94-4003-4251-801b-4b22f3a85a79}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Direct2D\Processors">
+      <UniqueIdentifier>{b136bc1d-9e5d-4703-a27b-00ded80e7b70}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="resource.h">
+      <Filter>리소스 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Stdafx.h">
+      <Filter>리소스 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="SharpenFilterProcessor.h">
+      <Filter>Direct2D\Processors</Filter>
+    </ClInclude>
+    <ClInclude Include="GaussianBlurFilterProcessor.h">
+      <Filter>Direct2D\Processors</Filter>
+    </ClInclude>
+    <ClInclude Include="GrayscaleFilterProcessor.h">
+      <Filter>Direct2D\Processors</Filter>
+    </ClInclude>
+    <ClInclude Include="InvertFilterProcessor.h">
+      <Filter>Direct2D\Processors</Filter>
+    </ClInclude>
+    <ClInclude Include="SepiaFilterProcessor.h">
+      <Filter>Direct2D\Processors</Filter>
+    </ClInclude>
+    <ClInclude Include="AddImageProcessor.h">
+      <Filter>Direct2D\Processors</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="AssemblyInfo.cpp">
+      <Filter>리소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="Stdafx.cpp">
+      <Filter>리소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="SharpenFilterProcessor.cpp">
+      <Filter>Direct2D\Processors</Filter>
+    </ClCompile>
+    <ClCompile Include="GaussianBlurFilterProcessor.cpp">
+      <Filter>Direct2D\Processors</Filter>
+    </ClCompile>
+    <ClCompile Include="GrayscaleFilterProcessor.cpp">
+      <Filter>Direct2D\Processors</Filter>
+    </ClCompile>
+    <ClCompile Include="InvertFilterProcessor.cpp">
+      <Filter>Direct2D\Processors</Filter>
+    </ClCompile>
+    <ClCompile Include="SepiaFilterProcessor.cpp">
+      <Filter>Direct2D\Processors</Filter>
+    </ClCompile>
+    <ClCompile Include="AddImageProcessor.cpp">
+      <Filter>Direct2D\Processors</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="app.rc">
+      <Filter>리소스 파일</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+</Project>

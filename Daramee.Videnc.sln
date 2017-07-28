@@ -3,7 +3,15 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26430.15
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Daramee.Videnc", "Daramee.Videnc\Daramee.Videnc.vcxproj", "{9BAD8A8E-71FB-4EC3-A28D-61ADEA066EB4}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Daramee.Videnc", "Daramee.Videnc\Daramee.Videnc.vcxproj", "{C04AF396-92CB-4BF4-82E9-50ABF036A692}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Daramee.Videnc.Test", "Daramee.Videnc.Test\Daramee.Videnc.Test.csproj", "{CA202BBE-A641-49B0-9BBD-D7544F0484FC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Daramee.Videnc.Util", "Daramee.Videnc.Util\Daramee.Videnc.Util.csproj", "{BC5E4A1C-71AE-40A2-BCE0-F5A04477AB19}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Videnc", "Videnc", "{2F5FED3F-4BD2-4193-9511-6B0F635B4ADF}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Daramee.Videnc.Processor.Direct2D", "Daramee.Videnc.Processor.Direct2D\Daramee.Videnc.Processor.Direct2D.vcxproj", "{16A21ED4-4F7F-4162-832B-357CD296C55B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,12 +19,29 @@ Global
 		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{9BAD8A8E-71FB-4EC3-A28D-61ADEA066EB4}.Debug|x64.ActiveCfg = Debug|x64
-		{9BAD8A8E-71FB-4EC3-A28D-61ADEA066EB4}.Debug|x64.Build.0 = Debug|x64
-		{9BAD8A8E-71FB-4EC3-A28D-61ADEA066EB4}.Release|x64.ActiveCfg = Release|x64
-		{9BAD8A8E-71FB-4EC3-A28D-61ADEA066EB4}.Release|x64.Build.0 = Release|x64
+		{C04AF396-92CB-4BF4-82E9-50ABF036A692}.Debug|x64.ActiveCfg = Debug|x64
+		{C04AF396-92CB-4BF4-82E9-50ABF036A692}.Debug|x64.Build.0 = Debug|x64
+		{C04AF396-92CB-4BF4-82E9-50ABF036A692}.Release|x64.ActiveCfg = Release|x64
+		{C04AF396-92CB-4BF4-82E9-50ABF036A692}.Release|x64.Build.0 = Release|x64
+		{CA202BBE-A641-49B0-9BBD-D7544F0484FC}.Debug|x64.ActiveCfg = Debug|x64
+		{CA202BBE-A641-49B0-9BBD-D7544F0484FC}.Debug|x64.Build.0 = Debug|x64
+		{CA202BBE-A641-49B0-9BBD-D7544F0484FC}.Release|x64.ActiveCfg = Release|x64
+		{CA202BBE-A641-49B0-9BBD-D7544F0484FC}.Release|x64.Build.0 = Release|x64
+		{BC5E4A1C-71AE-40A2-BCE0-F5A04477AB19}.Debug|x64.ActiveCfg = Debug|x64
+		{BC5E4A1C-71AE-40A2-BCE0-F5A04477AB19}.Debug|x64.Build.0 = Debug|x64
+		{BC5E4A1C-71AE-40A2-BCE0-F5A04477AB19}.Release|x64.ActiveCfg = Release|x64
+		{BC5E4A1C-71AE-40A2-BCE0-F5A04477AB19}.Release|x64.Build.0 = Release|x64
+		{16A21ED4-4F7F-4162-832B-357CD296C55B}.Debug|x64.ActiveCfg = Debug|x64
+		{16A21ED4-4F7F-4162-832B-357CD296C55B}.Debug|x64.Build.0 = Debug|x64
+		{16A21ED4-4F7F-4162-832B-357CD296C55B}.Release|x64.ActiveCfg = Release|x64
+		{16A21ED4-4F7F-4162-832B-357CD296C55B}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{C04AF396-92CB-4BF4-82E9-50ABF036A692} = {2F5FED3F-4BD2-4193-9511-6B0F635B4ADF}
+		{BC5E4A1C-71AE-40A2-BCE0-F5A04477AB19} = {2F5FED3F-4BD2-4193-9511-6B0F635B4ADF}
+		{16A21ED4-4F7F-4162-832B-357CD296C55B} = {2F5FED3F-4BD2-4193-9511-6B0F635B4ADF}
 	EndGlobalSection
 EndGlobal
