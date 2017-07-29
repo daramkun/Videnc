@@ -25,11 +25,18 @@ namespace Daramee.Videnc.Test
 				HardwareAccelerationEncoding = true,
 
 				VideoBitrate = ( uint ) VideoBitrate._12Mbps,
-				AudioBitrate = AudioBitrate._192Kbps
+				AudioBitrate = AudioBitrate._192Kbps,
+
+				ResizeVideo = true,
+				VideoWidth = 640,
+				VideoHeight = 360,
+
+				ChangeFramerate = true,
+				VideoFramerate = VideoFramerate._60,
 
 			}, inputStream ) )
 			{
-				streamer.Processor = new Processor ()
+				streamer.Processor = new Processor ( true )
 				{
 					Items = new List<ProcessorItem> ()
 					{

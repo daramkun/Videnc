@@ -60,7 +60,7 @@ namespace Daramee
 		public ref class Processor
 		{
 		public:
-			Processor ();
+			Processor ( bool hardwareProcessing );
 			~Processor ();
 
 		public:

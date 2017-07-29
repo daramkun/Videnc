@@ -13,7 +13,7 @@ inline Daramee::Videnc::ProcessorItem::ProcessorItem ()
 	timeline = gcnew List<ProcessorTimeline^> ();
 }
 
-inline Daramee::Videnc::Processor::Processor ()
+inline Daramee::Videnc::Processor::Processor ( bool hardwareProcessing )
 {
 	Items = nullptr;
 
@@ -33,7 +33,7 @@ inline Daramee::Videnc::Processor::Processor ()
 	d2dFactory = tempD2DFactory.Detach ();
 
 	CComPtr<ID3D11Device> d3dDevice;
-	if ( FAILED ( D3D11CreateDevice ( nullptr, D3D_DRIVER_TYPE_HARDWARE, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+	if ( FAILED ( D3D11CreateDevice ( nullptr, hardwareProcessing ? D3D_DRIVER_TYPE_HARDWARE : D3D_DRIVER_TYPE_SOFTWARE, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
 		nullptr, 0, D3D11_SDK_VERSION, &d3dDevice, nullptr, nullptr ) ) )
 		throw gcnew PlatformNotSupportedException ( "Cannot Create Direct3D 11 Device object with BGRA format supported." );
 
